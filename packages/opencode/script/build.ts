@@ -140,6 +140,7 @@ const targets = singleFlag
 await $`rm -rf dist`
 
 const binaries: Record<string, string> = {}
+const bundle: Record<string, { binary: number; sourcemap: number; total: number }> = {}
 if (!skipInstall) {
   await $`bun install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
   await $`bun install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
@@ -193,6 +194,14 @@ for (const item of targets) {
   })
 
   await $`rm -rf ./dist/${name}/bin/tui`
+  const binary = Bun.file(`dist/${name}/bin/${binaryName}`).size
+  const sourcemap = Bun.file(`dist/${name}/bin/${binaryName}.map`).size
+  bundle[name] = {
+    binary,
+    sourcemap,
+    total: binary + sourcemap,
+  }
+
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {
@@ -207,6 +216,9 @@ for (const item of targets) {
   )
   binaries[name] = Script.version
 }
+
+await Bun.file("dist/bundle-report.json").write(JSON.stringify(bundle, null, 2))
+console.log("Generated dist/bundle-report.json")
 
 if (Script.release) {
   for (const key of Object.keys(binaries)) {

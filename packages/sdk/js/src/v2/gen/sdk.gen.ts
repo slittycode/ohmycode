@@ -40,6 +40,8 @@ import type {
   GlobalDisposeResponses,
   GlobalEventResponses,
   GlobalHealthResponses,
+  GlobalReadyErrors,
+  GlobalReadyResponses,
   InstanceDisposeResponses,
   LspStatusResponses,
   McpAddErrors,
@@ -266,6 +268,18 @@ export class Global extends HeyApiClient {
   public health<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).get<GlobalHealthResponses, unknown, ThrowOnError>({
       url: "/global/health",
+      ...options,
+    })
+  }
+
+  /**
+   * Get readiness
+   *
+   * Get readiness checks for the OpenCode server.
+   */
+  public ready<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).get<GlobalReadyResponses, GlobalReadyErrors, ThrowOnError>({
+      url: "/global/ready",
       ...options,
     })
   }

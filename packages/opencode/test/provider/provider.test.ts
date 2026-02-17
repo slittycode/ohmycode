@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test"
 import path from "path"
+import { generateText } from "ai"
 
 import { tmpdir } from "../fixture/fixture"
 import { Instance } from "../../src/project/instance"
@@ -2217,4 +2218,229 @@ test("Google Vertex: supports OpenAI compatible models", async () => {
       expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
     },
   })
+})
+
+test("provider response cache reuses identical non-stream responses", async () => {
+  let requests = 0
+  const server = Bun.serve({
+    port: 0,
+    async fetch(req) {
+      requests += 1
+      await req.json()
+      return Response.json({
+        id: `chatcmpl-${requests}`,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: "cache-model",
+        choices: [{ index: 0, message: { role: "assistant", content: "cached" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      })
+    },
+  })
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["cache-provider"],
+            provider: {
+              "cache-provider": {
+                name: "Cache Provider",
+                npm: "@ai-sdk/openai-compatible",
+                env: [],
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                  responseCache: 60_000,
+                },
+                models: {
+                  "cache-model": {
+                    name: "Cache Model",
+                    tool_call: true,
+                    limit: { context: 4000, output: 1000 },
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = await Provider.getModel("cache-provider", "cache-model")
+        const language = await Provider.getLanguage(model)
+
+        const first = await generateText({ model: language as any, prompt: "hello cache" })
+        const second = await generateText({ model: language as any, prompt: "hello cache" })
+
+        expect(first.text).toBe("cached")
+        expect(second.text).toBe("cached")
+        expect(requests).toBe(1)
+      },
+    })
+  } finally {
+    server.stop()
+  }
+})
+
+test("provider response cache deduplicates inflight requests", async () => {
+  let requests = 0
+  const server = Bun.serve({
+    port: 0,
+    async fetch(req) {
+      requests += 1
+      await req.json()
+      await Bun.sleep(40)
+      return Response.json({
+        id: `chatcmpl-${requests}`,
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: "cache-model",
+        choices: [{ index: 0, message: { role: "assistant", content: "inflight" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      })
+    },
+  })
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["cache-provider"],
+            provider: {
+              "cache-provider": {
+                name: "Cache Provider",
+                npm: "@ai-sdk/openai-compatible",
+                env: [],
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                  responseCache: 60_000,
+                },
+                models: {
+                  "cache-model": {
+                    name: "Cache Model",
+                    tool_call: true,
+                    limit: { context: 4000, output: 1000 },
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = await Provider.getModel("cache-provider", "cache-model")
+        const language = await Provider.getLanguage(model)
+
+        const [first, second] = await Promise.all([
+          generateText({ model: language as any, prompt: "hello inflight" }),
+          generateText({ model: language as any, prompt: "hello inflight" }),
+        ])
+
+        expect(first.text).toBe("inflight")
+        expect(second.text).toBe("inflight")
+        expect(requests).toBe(1)
+      },
+    })
+  } finally {
+    server.stop()
+  }
+})
+
+test("provider retry retries configured transient responses", async () => {
+  let requests = 0
+  const server = Bun.serve({
+    port: 0,
+    async fetch(req) {
+      requests += 1
+      await req.json()
+      if (requests === 1) {
+        return Response.json(
+          {
+            error: {
+              message: "busy",
+            },
+          },
+          {
+            status: 503,
+            headers: {
+              "retry-after-ms": "1",
+            },
+          },
+        )
+      }
+      return Response.json({
+        id: "chatcmpl-2",
+        object: "chat.completion",
+        created: Math.floor(Date.now() / 1000),
+        model: "retry-model",
+        choices: [{ index: 0, message: { role: "assistant", content: "retried" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+      })
+    },
+  })
+
+  try {
+    await using tmp = await tmpdir({
+      init: async (dir) => {
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({
+            $schema: "https://opencode.ai/config.json",
+            enabled_providers: ["retry-provider"],
+            provider: {
+              "retry-provider": {
+                name: "Retry Provider",
+                npm: "@ai-sdk/openai-compatible",
+                env: [],
+                options: {
+                  apiKey: "test-key",
+                  baseURL: `${server.url.origin}/v1`,
+                  retry: {
+                    attempts: 1,
+                    delay: 1,
+                    status: [503],
+                  },
+                },
+                models: {
+                  "retry-model": {
+                    name: "Retry Model",
+                    tool_call: true,
+                    limit: { context: 4000, output: 1000 },
+                  },
+                },
+              },
+            },
+          }),
+        )
+      },
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const model = await Provider.getModel("retry-provider", "retry-model")
+        const language = await Provider.getLanguage(model)
+        const result = await generateText({ model: language as any, prompt: "hello retry" })
+        expect(result.text).toBe("retried")
+        expect(requests).toBe(2)
+      },
+    })
+  } finally {
+    server.stop()
+  }
 })

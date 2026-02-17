@@ -969,6 +969,28 @@ export namespace Config {
   })
   export type Layout = z.infer<typeof Layout>
 
+  export const ProviderRetry = z
+    .object({
+      attempts: z
+        .number()
+        .int()
+        .min(0)
+        .max(8)
+        .optional()
+        .describe("Maximum number of retry attempts for transient provider errors"),
+      delay: z.number().int().positive().optional().describe("Base retry delay in milliseconds (default: 250)"),
+      maxDelay: z.number().int().positive().optional().describe("Maximum retry delay in milliseconds (default: 10000)"),
+      backoff: z.number().positive().optional().describe("Backoff multiplier between retry attempts (default: 2)"),
+      status: z
+        .array(z.number().int().min(100).max(599))
+        .optional()
+        .describe("HTTP status codes that should trigger retries"),
+    })
+    .strict()
+    .meta({
+      ref: "ProviderRetryConfig",
+    })
+
   export const Provider = ModelsDev.Provider.partial()
     .extend({
       whitelist: z.array(z.string()).optional(),
@@ -997,6 +1019,24 @@ export namespace Config {
           baseURL: z.string().optional(),
           enterpriseUrl: z.string().optional().describe("GitHub Enterprise URL for copilot authentication"),
           setCacheKey: z.boolean().optional().describe("Enable promptCacheKey for this provider (default false)"),
+          responseCache: z
+            .union([
+              z
+                .number()
+                .int()
+                .positive()
+                .describe("Cache successful non-streaming provider responses for this many milliseconds"),
+              z.literal(false).describe("Disable response caching for this provider"),
+            ])
+            .optional(),
+          retry: z
+            .union([
+              z.number().int().min(0).max(8).describe("Retry count shortcut for transient provider request failures"),
+              z.literal(false).describe("Disable request retries for this provider"),
+              ProviderRetry,
+            ])
+            .optional(),
+          litellmProxy: z.boolean().optional().describe("Enable LiteLLM proxy compatibility behavior"),
           timeout: z
             .union([
               z
@@ -1262,6 +1302,20 @@ export namespace Config {
     return load(text, filepath)
   }
 
+  function normalize(input: Info) {
+    if (input.server?.cors) {
+      input.server.cors = unique(input.server.cors)
+    }
+
+    for (const provider of Object.values(input.provider ?? {})) {
+      const retry = provider.options?.retry
+      if (!retry || typeof retry !== "object" || Array.isArray(retry)) continue
+      if (Array.isArray(retry.status)) retry.status = unique(retry.status)
+    }
+
+    return input
+  }
+
   async function load(text: string, configFilepath: string) {
     const original = text
     text = text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
@@ -1337,7 +1391,7 @@ export namespace Config {
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
         await Bun.write(configFilepath, updated).catch(() => {})
       }
-      const data = parsed.data
+      const data = normalize(parsed.data)
       if (data.plugin) {
         for (let i = 0; i < data.plugin.length; i++) {
           const plugin = data.plugin[i]
@@ -1452,7 +1506,7 @@ export namespace Config {
     }
 
     const parsed = Info.safeParse(data)
-    if (parsed.success) return parsed.data
+    if (parsed.success) return normalize(parsed.data)
 
     throw new InvalidError({
       path: filepath,

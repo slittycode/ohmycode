@@ -1,7 +1,5 @@
 import { Database as BunDatabase } from "bun:sqlite"
-import { drizzle, type SQLiteBunDatabase } from "drizzle-orm/bun-sqlite"
-import { migrate } from "drizzle-orm/bun-sqlite/migrator"
-import { type SQLiteTransaction } from "drizzle-orm/sqlite-core"
+import { drizzle } from "drizzle-orm/bun-sqlite"
 export * from "drizzle-orm"
 import { Context } from "../util/context"
 import { lazy } from "../util/lazy"
@@ -10,6 +8,7 @@ import { Log } from "../util/log"
 import { NamedError } from "@opencode-ai/util/error"
 import z from "zod"
 import path from "path"
+import { createHash } from "node:crypto"
 import { readFileSync, readdirSync } from "fs"
 import * as schema from "./schema"
 
@@ -27,9 +26,12 @@ const log = Log.create({ service: "db" })
 export namespace Database {
   export const Path = path.join(Global.Path.data, "ohmycode.db")
   type Schema = typeof schema
-  export type Transaction = SQLiteTransaction<"sync", void, Schema>
+  function createClient(sqlite: BunDatabase) {
+    return drizzle({ client: sqlite, schema })
+  }
 
-  type Client = SQLiteBunDatabase<Schema>
+  type Client = ReturnType<typeof createClient>
+  export type Transaction = Parameters<Client["transaction"]>[0] extends (tx: infer T) => any ? T : never
 
   type Journal = { sql: string; timestamp: number }[]
 
@@ -46,23 +48,59 @@ export namespace Database {
     )
   }
 
-  function migrations(dir: string): Journal {
+  function migrations(dir: string, after = 0): Journal {
     const dirs = readdirSync(dir, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
+      .map((entry) => ({ name: entry.name, timestamp: time(entry.name) }))
+      .filter((entry) => entry.timestamp > after)
+      .sort((a, b) => a.timestamp - b.timestamp)
 
-    const sql = dirs
-      .map((name) => {
-        const file = path.join(dir, name, "migration.sql")
+    return dirs
+      .map((entry) => {
+        const file = path.join(dir, entry.name, "migration.sql")
         if (!Bun.file(file).size) return
         return {
           sql: readFileSync(file, "utf-8"),
-          timestamp: time(name),
+          timestamp: entry.timestamp,
         }
       })
       .filter(Boolean) as Journal
+  }
 
-    return sql.sort((a, b) => a.timestamp - b.timestamp)
+  function migrationTable(db: Client) {
+    db.$client.exec(`
+      CREATE TABLE IF NOT EXISTS "__drizzle_migrations" (
+        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+        hash text NOT NULL,
+        created_at numeric
+      )
+    `)
+  }
+
+  function migrationLatest(db: Client) {
+    migrationTable(db)
+    const latest = db.$client
+      .query(`SELECT created_at FROM "__drizzle_migrations" ORDER BY created_at DESC LIMIT 1`)
+      .get() as { created_at: number } | null
+    return latest ? Number(latest.created_at) : 0
+  }
+
+  function apply(db: Client, entries: Journal) {
+    if (entries.length === 0) return
+    db.$client.transaction((batch: Journal) => {
+      for (const entry of batch) {
+        const statements = entry.sql
+          .split("--> statement-breakpoint")
+          .map((statement) => statement.trim())
+          .filter(Boolean)
+
+        for (const statement of statements) db.$client.exec(statement)
+
+        db.$client
+          .query(`INSERT INTO "__drizzle_migrations" ("hash", "created_at") VALUES (?, ?)`)
+          .run(createHash("sha256").update(entry.sql).digest("hex"), entry.timestamp)
+      }
+    })(entries)
   }
 
   export const Client = lazy(() => {
@@ -77,19 +115,21 @@ export namespace Database {
     sqlite.run("PRAGMA foreign_keys = ON")
     sqlite.run("PRAGMA wal_checkpoint(PASSIVE)")
 
-    const db = drizzle({ client: sqlite, schema })
+    const db = createClient(sqlite)
+    const latest = migrationLatest(db)
 
     // Apply schema migrations
     const entries =
       typeof OPENCODE_MIGRATIONS !== "undefined"
-        ? OPENCODE_MIGRATIONS
-        : migrations(path.join(import.meta.dirname, "../../migration"))
+        ? OPENCODE_MIGRATIONS.filter((entry) => entry.timestamp > latest)
+        : migrations(path.join(import.meta.dirname, "../../migration"), latest)
     if (entries.length > 0) {
       log.info("applying migrations", {
         count: entries.length,
         mode: typeof OPENCODE_MIGRATIONS !== "undefined" ? "bundled" : "dev",
+        latest,
       })
-      migrate(db, entries)
+      apply(db, entries)
     }
 
     return db

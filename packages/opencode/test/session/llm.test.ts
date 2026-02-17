@@ -96,6 +96,27 @@ describe("session.llm.hasToolCalls", () => {
     ] as ModelMessage[]
     expect(LLM.hasToolCalls(messages)).toBe(true)
   })
+
+  test("returns true when tool call appears after empty assistant content", () => {
+    const messages = [
+      {
+        role: "assistant",
+        content: [],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "checking" },
+          {
+            type: "tool-call",
+            toolCallId: "call-789",
+            toolName: "grep",
+          },
+        ],
+      },
+    ] as ModelMessage[]
+    expect(LLM.hasToolCalls(messages)).toBe(true)
+  })
 })
 
 type Capture = {

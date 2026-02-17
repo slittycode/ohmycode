@@ -68,6 +68,17 @@ export type EventGlobalDisposed = {
   }
 }
 
+export type EventServerError = {
+  type: "server.error"
+  properties: {
+    requestID?: string
+    method?: string
+    path?: string
+    name: string
+    message: string
+  }
+}
+
 export type EventLspClientDiagnostics = {
   type: "lsp.client.diagnostics"
   properties: {
@@ -948,6 +959,7 @@ export type Event =
   | EventServerInstanceDisposed
   | EventServerConnected
   | EventGlobalDisposed
+  | EventServerError
   | EventLspClientDiagnostics
   | EventLspUpdated
   | EventFileEdited
@@ -1395,7 +1407,7 @@ export type ServerConfig = {
    */
   mdns?: boolean
   /**
-   * Custom domain name for mDNS service (default: opencode.local)
+   * Custom domain name for mDNS service (default: ohmycode.local)
    */
   mdnsDomain?: string
   /**
@@ -1504,6 +1516,29 @@ export type AgentConfig = {
     | undefined
 }
 
+export type ProviderRetryConfig = {
+  /**
+   * Maximum number of retry attempts for transient provider errors
+   */
+  attempts?: number
+  /**
+   * Base retry delay in milliseconds (default: 250)
+   */
+  delay?: number
+  /**
+   * Maximum retry delay in milliseconds (default: 10000)
+   */
+  maxDelay?: number
+  /**
+   * Backoff multiplier between retry attempts (default: 2)
+   */
+  backoff?: number
+  /**
+   * HTTP status codes that should trigger retries
+   */
+  status?: Array<number>
+}
+
 export type ProviderConfig = {
   api?: string
   name?: string
@@ -1585,11 +1620,28 @@ export type ProviderConfig = {
      * Enable promptCacheKey for this provider (default false)
      */
     setCacheKey?: boolean
+    responseCache?: number | false
+    retry?: number | false | ProviderRetryConfig
+    /**
+     * Enable LiteLLM proxy compatibility behavior
+     */
+    litellmProxy?: boolean
     /**
      * Timeout in milliseconds for requests to this provider. Default is 300000 (5 minutes). Set to false to disable timeout.
      */
     timeout?: number | false
-    [key: string]: unknown | string | boolean | number | false | undefined
+    [key: string]:
+      | unknown
+      | string
+      | boolean
+      | number
+      | false
+      | number
+      | false
+      | ProviderRetryConfig
+      | number
+      | false
+      | undefined
   }
 }
 
@@ -2258,10 +2310,51 @@ export type GlobalHealthResponses = {
   200: {
     healthy: true
     version: string
+    uptime: number
+    timestamp: string
   }
 }
 
 export type GlobalHealthResponse = GlobalHealthResponses[keyof GlobalHealthResponses]
+
+export type GlobalReadyData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/ready"
+}
+
+export type GlobalReadyErrors = {
+  /**
+   * Server is not ready
+   */
+  503: {
+    ready: boolean
+    version: string
+    checks: {
+      config: boolean
+    }
+    timestamp: string
+  }
+}
+
+export type GlobalReadyError = GlobalReadyErrors[keyof GlobalReadyErrors]
+
+export type GlobalReadyResponses = {
+  /**
+   * Server is ready
+   */
+  200: {
+    ready: boolean
+    version: string
+    checks: {
+      config: boolean
+    }
+    timestamp: string
+  }
+}
+
+export type GlobalReadyResponse = GlobalReadyResponses[keyof GlobalReadyResponses]
 
 export type GlobalEventData = {
   body?: never

@@ -4,6 +4,7 @@ import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
+import type { LanguageModelV2 } from "@ai-sdk/provider"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
@@ -16,29 +17,7 @@ import { Flag } from "../flag/flag"
 import { iife } from "@/util/iife"
 import { Global } from "../global"
 import path from "path"
-
-// Direct imports for bundled providers
-import { createAmazonBedrock, type AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
-import { createAnthropic } from "@ai-sdk/anthropic"
-import { createAzure } from "@ai-sdk/azure"
-import { createGoogleGenerativeAI } from "@ai-sdk/google"
-import { createVertex } from "@ai-sdk/google-vertex"
-import { createVertexAnthropic } from "@ai-sdk/google-vertex/anthropic"
-import { createOpenAI } from "@ai-sdk/openai"
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
-import { createOpenRouter, type LanguageModelV2 } from "@openrouter/ai-sdk-provider"
-import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/copilot"
-import { createXai } from "@ai-sdk/xai"
-import { createMistral } from "@ai-sdk/mistral"
-import { createGroq } from "@ai-sdk/groq"
-import { createDeepInfra } from "@ai-sdk/deepinfra"
-import { createCerebras } from "@ai-sdk/cerebras"
-import { createCohere } from "@ai-sdk/cohere"
-import { createGateway } from "@ai-sdk/gateway"
-import { createTogetherAI } from "@ai-sdk/togetherai"
-import { createPerplexity } from "@ai-sdk/perplexity"
-import { createVercel } from "@ai-sdk/vercel"
-import { createGitLab, VERSION as GITLAB_PROVIDER_VERSION } from "@gitlab/gitlab-ai-provider"
+import type { AmazonBedrockProviderSettings } from "@ai-sdk/amazon-bedrock"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 
@@ -81,30 +60,38 @@ export namespace Provider {
     })
   }
 
-  const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
-    "@ai-sdk/amazon-bedrock": createAmazonBedrock,
-    "@ai-sdk/anthropic": createAnthropic,
-    "@ai-sdk/azure": createAzure,
-    "@ai-sdk/google": createGoogleGenerativeAI,
-    "@ai-sdk/google-vertex": createVertex,
-    "@ai-sdk/google-vertex/anthropic": createVertexAnthropic,
-    "@ai-sdk/openai": createOpenAI,
-    "@ai-sdk/openai-compatible": createOpenAICompatible,
-    "@openrouter/ai-sdk-provider": createOpenRouter,
-    "@ai-sdk/xai": createXai,
-    "@ai-sdk/mistral": createMistral,
-    "@ai-sdk/groq": createGroq,
-    "@ai-sdk/deepinfra": createDeepInfra,
-    "@ai-sdk/cerebras": createCerebras,
-    "@ai-sdk/cohere": createCohere,
-    "@ai-sdk/gateway": createGateway,
-    "@ai-sdk/togetherai": createTogetherAI,
-    "@ai-sdk/perplexity": createPerplexity,
-    "@ai-sdk/vercel": createVercel,
-    "@gitlab/gitlab-ai-provider": createGitLab,
+  type BundledProviderFactory = (options: any) => SDK
+  type BundledProviderLoader = () => Promise<BundledProviderFactory>
+
+  const BUNDLED_PROVIDERS: Record<string, BundledProviderLoader> = {
+    "@ai-sdk/amazon-bedrock": () => import("@ai-sdk/amazon-bedrock").then((mod) => mod.createAmazonBedrock as any),
+    "@ai-sdk/anthropic": () => import("@ai-sdk/anthropic").then((mod) => mod.createAnthropic as any),
+    "@ai-sdk/azure": () => import("@ai-sdk/azure").then((mod) => mod.createAzure as any),
+    "@ai-sdk/google": () => import("@ai-sdk/google").then((mod) => mod.createGoogleGenerativeAI as any),
+    "@ai-sdk/google-vertex": () => import("@ai-sdk/google-vertex").then((mod) => mod.createVertex as any),
+    "@ai-sdk/google-vertex/anthropic": () =>
+      import("@ai-sdk/google-vertex/anthropic").then((mod) => mod.createVertexAnthropic as any),
+    "@ai-sdk/openai": () => import("@ai-sdk/openai").then((mod) => mod.createOpenAI as any),
+    "@ai-sdk/openai-compatible": () =>
+      import("@ai-sdk/openai-compatible").then((mod) => mod.createOpenAICompatible as any),
+    "@openrouter/ai-sdk-provider": () =>
+      import("@openrouter/ai-sdk-provider").then((mod) => mod.createOpenRouter as any),
+    "@ai-sdk/xai": () => import("@ai-sdk/xai").then((mod) => mod.createXai as any),
+    "@ai-sdk/mistral": () => import("@ai-sdk/mistral").then((mod) => mod.createMistral as any),
+    "@ai-sdk/groq": () => import("@ai-sdk/groq").then((mod) => mod.createGroq as any),
+    "@ai-sdk/deepinfra": () => import("@ai-sdk/deepinfra").then((mod) => mod.createDeepInfra as any),
+    "@ai-sdk/cerebras": () => import("@ai-sdk/cerebras").then((mod) => mod.createCerebras as any),
+    "@ai-sdk/cohere": () => import("@ai-sdk/cohere").then((mod) => mod.createCohere as any),
+    "@ai-sdk/gateway": () => import("@ai-sdk/gateway").then((mod) => mod.createGateway as any),
+    "@ai-sdk/togetherai": () => import("@ai-sdk/togetherai").then((mod) => mod.createTogetherAI as any),
+    "@ai-sdk/perplexity": () => import("@ai-sdk/perplexity").then((mod) => mod.createPerplexity as any),
+    "@ai-sdk/vercel": () => import("@ai-sdk/vercel").then((mod) => mod.createVercel as any),
+    "@gitlab/gitlab-ai-provider": () => import("@gitlab/gitlab-ai-provider").then((mod) => mod.createGitLab as any),
     // @ts-ignore (TODO: kill this code so we dont have to maintain it)
-    "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
+    "@ai-sdk/github-copilot": () => import("./sdk/copilot").then((mod) => mod.createOpenaiCompatible as any),
   }
+
+  const BUNDLED_FACTORY_CACHE = new Map<string, BundledProviderFactory>()
 
   type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>) => Promise<any>
   type CustomLoader = (provider: Info) => Promise<{
@@ -112,6 +99,209 @@ export namespace Provider {
     getModel?: CustomModelLoader
     options?: Record<string, any>
   }>
+
+  type ResponseCacheEntry = {
+    status: number
+    statusText: string
+    headers: [string, string][]
+    body: ArrayBuffer
+    expires: number
+  }
+
+  const RESPONSE_CACHE_MAX = 128
+
+  function responseCacheKey(
+    providerID: string,
+    modelID: string,
+    input: RequestInfo | URL,
+    method: string,
+    body: string,
+  ) {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
+    return Bun.hash.xxHash32(`${providerID}\n${modelID}\n${method}\n${url}\n${body}`)
+  }
+
+  function responseCacheTTL(input: unknown) {
+    if (input === false) return 0
+    if (typeof input === "number") return Math.max(0, input)
+    return 10_000
+  }
+
+  function responseCacheable(method: string, body: unknown) {
+    if (method !== "POST") return false
+    if (typeof body !== "string") return false
+    if (body.length > 2_000_000) return false
+    if (/"stream"\s*:\s*true/.test(body)) return false
+    return true
+  }
+
+  function responseFromCache(input: ResponseCacheEntry) {
+    return new Response(input.body.slice(0), {
+      status: input.status,
+      statusText: input.statusText,
+      headers: input.headers,
+    })
+  }
+
+  function responseCacheSet(cache: Map<number, ResponseCacheEntry>, key: number, value: ResponseCacheEntry) {
+    cache.set(key, value)
+    if (cache.size <= RESPONSE_CACHE_MAX) return
+    const first = cache.keys().next().value
+    if (first !== undefined) cache.delete(first)
+  }
+
+  type RetryPolicy = {
+    attempts: number
+    delay: number
+    maxDelay: number
+    backoff: number
+    status: Set<number>
+  }
+
+  const RETRY_STATUS_DEFAULT = new Set([408, 409, 425, 429, 500, 502, 503, 504])
+
+  function retryPolicy(input: unknown): RetryPolicy {
+    if (input === false) {
+      return {
+        attempts: 0,
+        delay: 250,
+        maxDelay: 10_000,
+        backoff: 2,
+        status: RETRY_STATUS_DEFAULT,
+      }
+    }
+
+    if (typeof input === "number") {
+      return {
+        attempts: Math.max(0, Math.min(8, Math.floor(input))),
+        delay: 250,
+        maxDelay: 10_000,
+        backoff: 2,
+        status: RETRY_STATUS_DEFAULT,
+      }
+    }
+
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+      return {
+        attempts: 0,
+        delay: 250,
+        maxDelay: 10_000,
+        backoff: 2,
+        status: RETRY_STATUS_DEFAULT,
+      }
+    }
+
+    const retry = input as {
+      attempts?: number
+      delay?: number
+      maxDelay?: number
+      backoff?: number
+      status?: number[]
+    }
+
+    const attempts = typeof retry.attempts === "number" ? Math.max(0, Math.min(8, Math.floor(retry.attempts))) : 0
+    const delay = typeof retry.delay === "number" && retry.delay > 0 ? Math.floor(retry.delay) : 250
+    const maxDelay = typeof retry.maxDelay === "number" && retry.maxDelay > 0 ? Math.floor(retry.maxDelay) : 10_000
+    const backoff = typeof retry.backoff === "number" && retry.backoff >= 1 ? retry.backoff : 2
+
+    return {
+      attempts,
+      delay,
+      maxDelay,
+      backoff,
+      status: Array.isArray(retry.status) ? new Set(retry.status) : RETRY_STATUS_DEFAULT,
+    }
+  }
+
+  function retryAfter(headers: Headers) {
+    const rawMs = headers.get("retry-after-ms")
+    if (rawMs) {
+      const parsed = Number.parseFloat(rawMs)
+      if (!Number.isNaN(parsed) && parsed > 0) return Math.ceil(parsed)
+    }
+
+    const raw = headers.get("retry-after")
+    if (!raw) return
+
+    const seconds = Number.parseFloat(raw)
+    if (!Number.isNaN(seconds) && seconds > 0) return Math.ceil(seconds * 1000)
+
+    const absolute = Date.parse(raw) - Date.now()
+    if (!Number.isNaN(absolute) && absolute > 0) return Math.ceil(absolute)
+  }
+
+  async function retrySleep(ms: number, signal?: AbortSignal | null) {
+    if (!signal) return Bun.sleep(ms)
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError")
+    return new Promise<void>((resolve, reject) => {
+      const done = () => {
+        signal.removeEventListener("abort", abort)
+        resolve()
+      }
+      const abort = () => {
+        clearTimeout(timeout)
+        signal.removeEventListener("abort", abort)
+        reject(new DOMException("Aborted", "AbortError"))
+      }
+      const timeout = setTimeout(done, ms)
+      signal.addEventListener("abort", abort, { once: true })
+    })
+  }
+
+  async function requestRetry(
+    fetchFn: (input: any, init?: BunFetchRequestInit) => Promise<Response>,
+    input: any,
+    init: BunFetchRequestInit,
+    retry: RetryPolicy,
+    details: { providerID: string; modelID: string },
+  ) {
+    if (retry.attempts === 0) return fetchFn(input, init)
+    if (typeof init.body !== "string" && init.body !== undefined) return fetchFn(input, init)
+
+    let delay = retry.delay
+    for (const attempt of Array.from({ length: retry.attempts + 1 }, (_, i) => i + 1)) {
+      const result = await fetchFn(input, init)
+        .then((response) => ({ response }))
+        .catch((error) => ({ error }))
+
+      if ("error" in result) {
+        if (result.error instanceof DOMException && result.error.name === "AbortError") {
+          throw result.error
+        }
+        if (attempt > retry.attempts) {
+          throw result.error
+        }
+        const wait = Math.min(delay, retry.maxDelay)
+        log.warn("retrying provider error", {
+          providerID: details.providerID,
+          modelID: details.modelID,
+          attempt,
+          wait,
+          error: result.error,
+        })
+        await retrySleep(wait, init.signal)
+        delay = Math.min(Math.ceil(delay * retry.backoff), retry.maxDelay)
+        continue
+      }
+
+      const response = result.response
+      const shouldRetry = !response.ok && retry.status.has(response.status) && attempt <= retry.attempts
+      if (!shouldRetry) return response
+
+      const wait = Math.min(retryAfter(response.headers) ?? delay, retry.maxDelay)
+      log.warn("retrying provider response", {
+        providerID: details.providerID,
+        modelID: details.modelID,
+        attempt,
+        status: response.status,
+        wait,
+      })
+      await retrySleep(wait, init.signal)
+      delay = Math.min(Math.ceil(delay * retry.backoff), retry.maxDelay)
+    }
+
+    return fetchFn(input, init)
+  }
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
@@ -479,7 +669,7 @@ export namespace Provider {
       const providerConfig = config.provider?.["gitlab"]
 
       const aiGatewayHeaders = {
-        "User-Agent": `opencode/${Installation.VERSION} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+        "User-Agent": `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
         ...(providerConfig?.options?.aiGatewayHeaders || {}),
       }
 
@@ -495,7 +685,7 @@ export namespace Provider {
             ...(providerConfig?.options?.featureFlags || {}),
           },
         },
-        async getModel(sdk: ReturnType<typeof createGitLab>, modelID: string) {
+        async getModel(sdk: any, modelID: string) {
           return sdk.agenticChat(modelID, {
             aiGatewayHeaders,
             featureFlags: {
@@ -765,6 +955,8 @@ export namespace Provider {
       [providerID: string]: CustomModelLoader
     } = {}
     const sdk = new Map<number, SDK>()
+    const responseCache = new Map<number, ResponseCacheEntry>()
+    const responseInflight = new Map<number, Promise<ResponseCacheEntry>>()
 
     log.info("init")
 
@@ -1021,6 +1213,8 @@ export namespace Provider {
       providers,
       sdk,
       modelLoaders,
+      responseCache,
+      responseInflight,
     }
   })
 
@@ -1059,11 +1253,15 @@ export namespace Provider {
       if (existing) return existing
 
       const customFetch = options["fetch"]
+      const responseTTL = responseCacheTTL(options["responseCache"])
+      const retry = retryPolicy(options["retry"])
 
       options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
         // Preserve custom fetch if it exists, wrap it with timeout logic
         const fetchFn = customFetch ?? fetch
         const opts = init ?? {}
+        const method = String(opts.method ?? "GET").toUpperCase()
+        opts.method = method
 
         if (options["timeout"] !== undefined && options["timeout"] !== null) {
           const signals: AbortSignal[] = []
@@ -1079,7 +1277,7 @@ export namespace Provider {
         // Codex uses #[serde(skip_serializing)] on id fields for all item types:
         // Message, Reasoning, FunctionCall, LocalShellCall, CustomToolCall, WebSearchCall
         // IDs are only re-attached for Azure with store=true
-        if (model.api.npm === "@ai-sdk/openai" && opts.body && opts.method === "POST") {
+        if (model.api.npm === "@ai-sdk/openai" && opts.body && method === "POST") {
           const body = JSON.parse(opts.body as string)
           const isAzure = model.providerID.includes("azure")
           const keepIds = isAzure && body.store === true
@@ -1093,17 +1291,66 @@ export namespace Provider {
           }
         }
 
-        return fetchFn(input, {
+        const request = {
           ...opts,
           // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
           timeout: false,
+        }
+
+        if (responseTTL > 0 && responseCacheable(method, request.body)) {
+          const body = request.body as string
+          const key = responseCacheKey(model.providerID, model.id, input, method, body)
+          const now = Date.now()
+          const cached = s.responseCache.get(key)
+          if (cached && cached.expires > now) {
+            return responseFromCache(cached)
+          }
+          if (cached && cached.expires <= now) {
+            s.responseCache.delete(key)
+          }
+
+          let pending = s.responseInflight.get(key)
+          if (!pending) {
+            const created = requestRetry(fetchFn, input, request, retry, {
+              providerID: model.providerID,
+              modelID: model.id,
+            })
+              .then(async (result: Response) => {
+                const entry: ResponseCacheEntry = {
+                  status: result.status,
+                  statusText: result.statusText,
+                  headers: [...result.headers.entries()],
+                  body: await result.arrayBuffer(),
+                  expires: Date.now() + responseTTL,
+                }
+                if (result.ok) responseCacheSet(s.responseCache, key, entry)
+                return entry
+              })
+              .finally(() => {
+                s.responseInflight.delete(key)
+              })
+            s.responseInflight.set(key, created)
+            pending = created
+          }
+
+          return responseFromCache(await pending!)
+        }
+
+        return requestRetry(fetchFn, input, request, retry, {
+          providerID: model.providerID,
+          modelID: model.id,
         })
       }
 
-      const bundledFn = BUNDLED_PROVIDERS[model.api.npm]
-      if (bundledFn) {
+      const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
+      if (bundledLoader) {
         log.info("using bundled provider", { providerID: model.providerID, pkg: model.api.npm })
-        const loaded = bundledFn({
+        let factory = BUNDLED_FACTORY_CACHE.get(model.api.npm)
+        if (!factory) {
+          factory = await bundledLoader()
+          BUNDLED_FACTORY_CACHE.set(model.api.npm, factory)
+        }
+        const loaded = factory({
           name: model.providerID,
           ...options,
         })

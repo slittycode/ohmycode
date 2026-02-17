@@ -1,7 +1,6 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test"
 import { Database } from "bun:sqlite"
 import { drizzle } from "drizzle-orm/bun-sqlite"
-import { migrate } from "drizzle-orm/bun-sqlite/migrator"
 import path from "path"
 import fs from "fs/promises"
 import { readFileSync, readdirSync } from "fs"
@@ -76,7 +75,7 @@ function createTestDb() {
   const sqlite = new Database(":memory:")
   sqlite.exec("PRAGMA foreign_keys = ON")
 
-  // Apply schema migrations using drizzle migrate
+  // Apply schema migrations from migration folders
   const dir = path.join(import.meta.dirname, "../../migration")
   const entries = readdirSync(dir, { withFileTypes: true })
   const migrations = entries
@@ -86,7 +85,15 @@ function createTestDb() {
       timestamp: Number(entry.name.split("_")[0]),
     }))
     .sort((a, b) => a.timestamp - b.timestamp)
-  migrate(drizzle({ client: sqlite }), migrations)
+  sqlite.transaction((batch: { sql: string; timestamp: number }[]) => {
+    for (const migration of batch) {
+      const statements = migration.sql
+        .split("--> statement-breakpoint")
+        .map((statement) => statement.trim())
+        .filter(Boolean)
+      for (const statement of statements) sqlite.exec(statement)
+    }
+  })(migrations)
 
   return sqlite
 }

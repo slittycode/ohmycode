@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.1",
   "info": {
-    "title": "opencode",
-    "description": "opencode api",
+    "title": "ohmycode",
+    "description": "ohmycode api",
     "version": "1.0.0"
   },
   "paths": {
@@ -25,9 +25,15 @@
                     },
                     "version": {
                       "type": "string"
+                    },
+                    "uptime": {
+                      "type": "number"
+                    },
+                    "timestamp": {
+                      "type": "string"
                     }
                   },
-                  "required": ["healthy", "version"]
+                  "required": ["healthy", "version", "uptime", "timestamp"]
                 }
               }
             }
@@ -37,6 +43,83 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.health({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/global/ready": {
+      "get": {
+        "operationId": "global.ready",
+        "summary": "Get readiness",
+        "description": "Get readiness checks for the OpenCode server.",
+        "responses": {
+          "200": {
+            "description": "Server is ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ready": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "config": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["config"]
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["ready", "version", "checks", "timestamp"]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Server is not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ready": {
+                      "type": "boolean"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "checks": {
+                      "type": "object",
+                      "properties": {
+                        "config": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": ["config"]
+                    },
+                    "timestamp": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["ready", "version", "checks", "timestamp"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.ready({\n  ...\n})"
           }
         ]
       }
@@ -6023,6 +6106,37 @@
         },
         "required": ["type", "properties"]
       },
+      "Event.server.error": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "server.error"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "requestID": {
+                "type": "string"
+              },
+              "method": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["name", "message"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Event.lsp.client.diagnostics": {
         "type": "object",
         "properties": {
@@ -8441,6 +8555,9 @@
             "$ref": "#/components/schemas/Event.global.disposed"
           },
           {
+            "$ref": "#/components/schemas/Event.server.error"
+          },
+          {
             "$ref": "#/components/schemas/Event.lsp.client.diagnostics"
           },
           {
@@ -9066,7 +9183,7 @@
             "type": "boolean"
           },
           "mdnsDomain": {
-            "description": "Custom domain name for mDNS service (default: opencode.local)",
+            "description": "Custom domain name for mDNS service (default: ohmycode.local)",
             "type": "string"
           },
           "cors": {
@@ -9255,6 +9372,44 @@
           }
         },
         "additionalProperties": {}
+      },
+      "ProviderRetryConfig": {
+        "type": "object",
+        "properties": {
+          "attempts": {
+            "description": "Maximum number of retry attempts for transient provider errors",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "delay": {
+            "description": "Base retry delay in milliseconds (default: 250)",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "maxDelay": {
+            "description": "Maximum retry delay in milliseconds (default: 10000)",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "backoff": {
+            "description": "Backoff multiplier between retry attempts (default: 2)",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "status": {
+            "description": "HTTP status codes that should trigger retries",
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 100,
+              "maximum": 599
+            }
+          }
+        },
+        "additionalProperties": false
       },
       "ProviderConfig": {
         "type": "object",
@@ -9480,6 +9635,43 @@
               },
               "setCacheKey": {
                 "description": "Enable promptCacheKey for this provider (default false)",
+                "type": "boolean"
+              },
+              "responseCache": {
+                "anyOf": [
+                  {
+                    "description": "Cache successful non-streaming provider responses for this many milliseconds",
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "description": "Disable response caching for this provider",
+                    "type": "boolean",
+                    "const": false
+                  }
+                ]
+              },
+              "retry": {
+                "anyOf": [
+                  {
+                    "description": "Retry count shortcut for transient provider request failures",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 8
+                  },
+                  {
+                    "description": "Disable request retries for this provider",
+                    "type": "boolean",
+                    "const": false
+                  },
+                  {
+                    "$ref": "#/components/schemas/ProviderRetryConfig"
+                  }
+                ]
+              },
+              "litellmProxy": {
+                "description": "Enable LiteLLM proxy compatibility behavior",
                 "type": "boolean"
               },
               "timeout": {

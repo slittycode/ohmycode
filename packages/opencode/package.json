@@ -10,18 +10,15 @@
     "test": "bun test --timeout 30000",
     "build": "bun run script/build.ts",
     "dev": "bun run --conditions=browser ./src/index.ts",
-    "random": "echo 'Random script updated at $(date)' && echo 'Change queued successfully' && echo 'Another change made' && echo 'Yet another change' && echo 'One more change' && echo 'Final change' && echo 'Another final change' && echo 'Yet another final change'",
-    "clean": "echo 'Cleaning up...' && rm -rf node_modules dist",
-    "lint": "echo 'Running lint checks...' && bun test --coverage",
-    "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
-    "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
-    "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
+    "clean": "rm -rf dist",
+    "lint": "bun run typecheck && bun run format:check",
+    "format": "bunx prettier --write \"src/**/*.{ts,tsx}\" \"test/**/*.ts\"",
+    "format:check": "bunx prettier --check \"src/**/*.{ts,tsx}\" \"test/**/*.ts\"",
     "db": "bun drizzle-kit"
   },
   "bin": {
     "ohmycode": "./bin/opencode"
   },
-  "randomField": "this-is-a-random-value-12345",
   "exports": {
     "./*": "./src/*.ts"
   },
@@ -43,8 +40,8 @@
     "@types/turndown": "5.0.5",
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
-    "drizzle-kit": "1.0.0-beta.12-a5629fb",
-    "drizzle-orm": "1.0.0-beta.12-a5629fb",
+    "drizzle-kit": "0.31.9",
+    "drizzle-orm": "0.45.1",
     "typescript": "catalog:",
     "vscode-languageserver-types": "3.17.5",
     "why-is-node-running": "3.2.2",
@@ -103,7 +100,7 @@
     "clipboardy": "4.0.0",
     "decimal.js": "10.5.0",
     "diff": "catalog:",
-    "drizzle-orm": "1.0.0-beta.12-a5629fb",
+    "drizzle-orm": "0.45.1",
     "fuzzysort": "3.1.0",
     "gray-matter": "4.0.3",
     "hono": "catalog:",
@@ -128,6 +125,6 @@
     "zod-to-json-schema": "3.24.5"
   },
   "overrides": {
-    "drizzle-orm": "1.0.0-beta.12-a5629fb"
+    "drizzle-orm": "0.45.1"
   }
 }

@@ -8,7 +8,6 @@ import { streamSSE } from "hono/streaming"
 import { proxy } from "hono/proxy"
 import { basicAuth } from "hono/basic-auth"
 import z from "zod"
-import { Provider } from "../provider/provider"
 import { NamedError } from "@opencode-ai/util/error"
 import { LSP } from "../lsp"
 import { Format } from "../format"
@@ -31,15 +30,16 @@ import { ExperimentalRoutes } from "./routes/experimental"
 import { ProviderRoutes } from "./routes/provider"
 import { lazy } from "../util/lazy"
 import { InstanceBootstrap } from "../project/bootstrap"
-import { NotFoundError } from "../storage/db"
-import type { ContentfulStatusCode } from "hono/utils/http-status"
 import { websocket } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
-import { errors } from "./error"
+import { errors, status as errorStatus } from "./error"
 import { QuestionRoutes } from "./routes/question"
 import { PermissionRoutes } from "./routes/permission"
 import { GlobalRoutes } from "./routes/global"
 import { MDNS } from "./mdns"
+import { GlobalBus } from "@/bus/global"
+import { Event as ServerEvent } from "./event"
+import { randomUUID } from "node:crypto"
 
 // @ts-ignore This global is needed to prevent ai-sdk from logging warnings to stdout https://github.com/vercel/ai/blob/2dc67e0ef538307f21368db32d5a12345d98831b/packages/ai/src/logger/log-warnings.ts#L85
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -54,28 +54,48 @@ export namespace Server {
     return _url ?? new URL("http://localhost:4096")
   }
 
-  const app = new Hono()
+  const app = new Hono<{ Variables: { requestID: string } }>()
   export const App: () => Hono = lazy(
     () =>
       // TODO: Break server.ts into smaller route files to fix type inference
       app
         .onError((err, c) => {
+          const requestID = c.get("requestID")
           log.error("failed", {
             error: err,
+            requestID,
+            method: c.req.method,
+            path: c.req.path,
           })
+
+          GlobalBus.emit("event", {
+            directory: "global",
+            payload: {
+              type: ServerEvent.Error.type,
+              properties: {
+                requestID: typeof requestID === "string" ? requestID : undefined,
+                method: c.req.method,
+                path: c.req.path,
+                name: err instanceof Error ? err.name : "UnknownError",
+                message: err instanceof Error ? err.message : String(err),
+              },
+            },
+          })
+
           if (err instanceof NamedError) {
-            let status: ContentfulStatusCode
-            if (err instanceof NotFoundError) status = 404
-            else if (err instanceof Provider.ModelNotFoundError) status = 400
-            else if (err.name.startsWith("Worktree")) status = 400
-            else status = 500
-            return c.json(err.toObject(), { status })
+            return c.json(err.toObject(), { status: errorStatus(err) })
           }
           if (err instanceof HTTPException) return err.getResponse()
           const message = err instanceof Error && err.stack ? err.stack : err.toString()
           return c.json(new NamedError.Unknown({ message }).toObject(), {
             status: 500,
           })
+        })
+        .use(async (c, next) => {
+          const requestID = c.req.header("x-request-id") ?? randomUUID()
+          c.set("requestID", requestID)
+          c.header("x-request-id", requestID)
+          return next()
         })
         .use((c, next) => {
           // Allow CORS preflight requests to succeed without auth.
@@ -88,18 +108,25 @@ export namespace Server {
         })
         .use(async (c, next) => {
           const skipLogging = c.req.path === "/log"
+          const requestID = c.get("requestID")
+          const logger = typeof requestID === "string" ? log.clone().tag("requestID", requestID) : log
           if (!skipLogging) {
-            log.info("request", {
+            logger.info("request", {
               method: c.req.method,
               path: c.req.path,
             })
           }
-          const timer = log.time("request", {
+          const timer = logger.time("request", {
             method: c.req.method,
             path: c.req.path,
           })
           await next()
           if (!skipLogging) {
+            logger.info("response", {
+              method: c.req.method,
+              path: c.req.path,
+              status: c.res.status,
+            })
             timer.stop()
           }
         })

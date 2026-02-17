@@ -103,6 +103,36 @@ This starts the headless server on port 4096 by default. You can specify a diffe
 bun dev serve --port 8080
 ```
 
+### Health and readiness checks
+
+When validating server changes locally, check both health and readiness endpoints:
+
+```bash
+curl http://127.0.0.1:4096/global/health
+curl http://127.0.0.1:4096/global/ready
+```
+
+- `/global/health` reports process-level health data (version, uptime, timestamp)
+- `/global/ready` reports dependency checks used for startup/readiness gating
+- The server now echoes `x-request-id` in responses; pass one in requests to correlate logs
+
+### Release readiness checklist
+
+Before cutting or publishing a release, run:
+
+```bash
+bun run lint
+bun run typecheck
+bun --cwd packages/opencode test --timeout 30000
+./packages/opencode/script/build.ts --single --skip-install
+```
+
+If your change touches API routes or config schema, also run:
+
+```bash
+./script/generate.ts
+```
+
 ### Running the Web App
 
 To test UI changes during development:

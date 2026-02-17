@@ -14,6 +14,14 @@ import { errors } from "../error"
 const log = Log.create({ service: "server" })
 
 export const GlobalDisposedEvent = BusEvent.define("global.disposed", z.object({}))
+const Readiness = z.object({
+  ready: z.boolean(),
+  version: z.string(),
+  checks: z.object({
+    config: z.boolean(),
+  }),
+  timestamp: z.string(),
+})
 
 export const GlobalRoutes = lazy(() =>
   new Hono()
@@ -28,14 +36,66 @@ export const GlobalRoutes = lazy(() =>
             description: "Health information",
             content: {
               "application/json": {
-                schema: resolver(z.object({ healthy: z.literal(true), version: z.string() })),
+                schema: resolver(
+                  z.object({
+                    healthy: z.literal(true),
+                    version: z.string(),
+                    uptime: z.number(),
+                    timestamp: z.string(),
+                  }),
+                ),
               },
             },
           },
         },
       }),
       async (c) => {
-        return c.json({ healthy: true, version: Installation.VERSION })
+        return c.json({
+          healthy: true,
+          version: Installation.VERSION,
+          uptime: process.uptime(),
+          timestamp: new Date().toISOString(),
+        })
+      },
+    )
+    .get(
+      "/ready",
+      describeRoute({
+        summary: "Get readiness",
+        description: "Get readiness checks for the OpenCode server.",
+        operationId: "global.ready",
+        responses: {
+          200: {
+            description: "Server is ready",
+            content: {
+              "application/json": {
+                schema: resolver(Readiness),
+              },
+            },
+          },
+          503: {
+            description: "Server is not ready",
+            content: {
+              "application/json": {
+                schema: resolver(Readiness),
+              },
+            },
+          },
+        },
+      }),
+      async (c) => {
+        const config = await Config.getGlobal()
+          .then(() => true)
+          .catch(() => false)
+        const body = {
+          ready: config,
+          version: Installation.VERSION,
+          checks: {
+            config,
+          },
+          timestamp: new Date().toISOString(),
+        }
+        return c.json(body, config ? 200 : 503)
       },
     )
     .get(
