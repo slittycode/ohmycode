@@ -300,6 +300,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             }
           })
         },
+        setDefault(model: { providerID: string; modelID: string }) {
+          const name = agent.current().name
+          if (modelStore.model[name]) return
+          if (!isModelValid(model)) return
+          setModelStore("model", name, model)
+        },
         toggleFavorite(model: { providerID: string; modelID: string }) {
           batch(() => {
             if (!isModelValid(model)) {
@@ -386,7 +392,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const value = agent.current()
       if (value.model) {
         if (isModelValid(value.model))
-          model.set({
+          model.setDefault({
             providerID: value.model.providerID,
             modelID: value.model.modelID,
           })
