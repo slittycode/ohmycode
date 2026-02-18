@@ -1,30 +1,41 @@
-## Debugging
+# app package guide
 
-- NEVER try to restart the app, or the server process, EVER.
+## OVERVIEW
 
-## Local Dev
+SolidJS web client for sessions, layout/sidebar workflows, prompt input, and in-browser terminal UX.
 
-- `opencode dev web` proxies `https://app.opencode.ai`, so local UI/CSS changes will not show there.
-- For local UI changes, run the backend and app dev servers separately.
-- Backend (from `packages/opencode`): `bun run --conditions=browser ./src/index.ts serve --port 4096`
-- App (from `packages/app`): `bun dev -- --port 4444`
-- Open `http://localhost:4444` to verify UI changes (it targets the backend at `http://localhost:4096`).
+## WHERE TO LOOK
 
-## SolidJS
+- Route/page composition: `src/pages`.
+- Session UX hotspot: `src/pages/session`.
+- Shared UI building blocks: `src/components`.
+- Cross-page state and sync: `src/context`.
+- Helpers/utilities: `src/utils`.
 
-- Always prefer `createStore` over multiple `createSignal` calls
+## LOCAL DEV
 
-## Tool Calling
+- `opencode dev web` proxies production and will not reflect local UI/CSS edits.
+- For local UI work run backend and app separately:
+  - backend (`packages/opencode`): `bun run --conditions=browser ./src/index.ts serve --port 4096`
+  - app (`packages/app`): `bun dev -- --port 4444`
+- Verify at `http://localhost:4444`.
 
-- ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
+## CONVENTIONS
 
-## Browser Automation
+- Prefer `createStore` over many independent `createSignal` values.
+- Keep session behavior near `src/pages/session` unless clearly reusable.
+- Follow existing data attributes and semantic selectors used by e2e tests.
 
-Use `agent-browser` for web automation. Run `agent-browser --help` for all commands.
+## ANTI-PATTERNS
 
-Core workflow:
+- Never restart app/server processes from automation.
+- Do not move session-specific logic into broad global abstractions without reuse proof.
 
-1. `agent-browser open <url>` - Navigate to page
-2. `agent-browser snapshot -i` - Get interactive elements with refs (@e1, @e2)
-3. `agent-browser click @e1` / `fill @e2 "text"` - Interact using refs
-4. Re-snapshot after page changes
+## COMMANDS
+
+```bash
+bun --cwd packages/app run dev
+bun --cwd packages/app run typecheck
+bun --cwd packages/app run test:unit
+bun --cwd packages/app run test:e2e:local
+```
