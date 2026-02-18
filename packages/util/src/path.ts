@@ -1,14 +1,17 @@
-export function getFilename(path: string | undefined) {
-  if (!path) return ""
+function splitPath(path: string | undefined) {
+  if (!path) return [] as string[]
   const trimmed = path.replace(/[\/\\]+$/, "")
-  const parts = trimmed.split(/[\/\\]/)
+  return trimmed.split(/[\/\\]/)
+}
+
+export function getFilename(path: string | undefined) {
+  const parts = splitPath(path)
   return parts[parts.length - 1] ?? ""
 }
 
 export function getDirectory(path: string | undefined) {
-  if (!path) return ""
-  const trimmed = path.replace(/[\/\\]+$/, "")
-  const parts = trimmed.split(/[\/\\]/)
+  const parts = splitPath(path)
+  if (parts.length === 0) return ""
   return parts.slice(0, parts.length - 1).join("/") + "/"
 }
 
