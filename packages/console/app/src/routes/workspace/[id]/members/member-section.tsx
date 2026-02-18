@@ -9,7 +9,7 @@ import { User } from "@opencode-ai/console-core/user.js"
 import { RoleDropdown } from "./role-dropdown"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { formError, localizeError } from "~/lib/form-error"
+import { formError, localizeError, requireWorkspaceID } from "~/lib/form-error"
 
 const listMembers = query(async (workspaceID: string) => {
   "use server"
@@ -26,8 +26,9 @@ const inviteMember = action(async (form: FormData) => {
   "use server"
   const email = form.get("email")?.toString().trim()
   if (!email) return { error: formError.emailRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   const role = form.get("role")?.toString() as (typeof UserRole)[number]
   if (!role) return { error: formError.roleRequired }
   const limit = form.get("limit")?.toString()
@@ -49,8 +50,9 @@ const removeMember = action(async (form: FormData) => {
   "use server"
   const id = form.get("id")?.toString()
   if (!id) return { error: formError.idRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   return json(
     await withActor(
       () =>
@@ -68,8 +70,9 @@ const updateMember = action(async (form: FormData) => {
 
   const id = form.get("id")?.toString()
   if (!id) return { error: formError.idRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   const role = form.get("role")?.toString() as (typeof UserRole)[number]
   if (!role) return { error: formError.roleRequired }
   const limit = form.get("limit")?.toString()

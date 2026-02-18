@@ -6,7 +6,7 @@ import { Billing } from "@opencode-ai/console-core/billing.js"
 import styles from "./monthly-limit-section.module.css"
 import { queryBillingInfo } from "../../common"
 import { useI18n } from "~/context/i18n"
-import { formError, localizeError } from "~/lib/form-error"
+import { formError, localizeError, requireWorkspaceID } from "~/lib/form-error"
 
 const setMonthlyLimit = action(async (form: FormData) => {
   "use server"
@@ -14,8 +14,9 @@ const setMonthlyLimit = action(async (form: FormData) => {
   if (!limit) return { error: formError.limitRequired }
   const numericLimit = parseInt(limit)
   if (numericLimit < 0) return { error: formError.monthlyLimitInvalid }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   return json(
     await withActor(
       () =>

@@ -11,7 +11,7 @@ import { queryBillingInfo } from "../../common"
 import styles from "./black-section.module.css"
 import waitlistStyles from "./black-waitlist-section.module.css"
 import { useI18n } from "~/context/i18n"
-import { formError } from "~/lib/form-error"
+import { requireWorkspaceID } from "~/lib/form-error"
 
 const querySubscription = query(async (workspaceID: string) => {
   "use server"
@@ -113,8 +113,9 @@ const createSessionUrl = action(async (workspaceID: string, returnUrl: string) =
 
 const setUseBalance = action(async (form: FormData) => {
   "use server"
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   const useBalance = form.get("useBalance")?.toString() === "true"
 
   return json(

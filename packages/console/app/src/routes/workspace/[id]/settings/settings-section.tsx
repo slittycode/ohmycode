@@ -7,7 +7,7 @@ import styles from "./settings-section.module.css"
 import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { useI18n } from "~/context/i18n"
-import { formError, localizeError } from "~/lib/form-error"
+import { formError, localizeError, requireWorkspaceID } from "~/lib/form-error"
 
 const getWorkspaceInfo = query(async (workspaceID: string) => {
   "use server"
@@ -33,8 +33,9 @@ const updateWorkspace = action(async (form: FormData) => {
   const name = form.get("name")?.toString().trim()
   if (!name) return { error: formError.workspaceNameRequired }
   if (name.length > 255) return { error: formError.nameTooLong }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   return json(
     await withActor(
       () =>

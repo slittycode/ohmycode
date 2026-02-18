@@ -18,7 +18,7 @@ import {
 } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
-import { formError } from "~/lib/form-error"
+import { formError, requireWorkspaceID } from "~/lib/form-error"
 
 const getModelLab = (modelId: string) => {
   if (modelId.startsWith("claude")) return "Anthropic"
@@ -63,8 +63,9 @@ const updateModel = action(async (form: FormData) => {
   "use server"
   const model = form.get("model")?.toString()
   if (!model) return { error: formError.modelRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   const enabled = form.get("enabled")?.toString() === "true"
   return json(
     withActor(async () => {

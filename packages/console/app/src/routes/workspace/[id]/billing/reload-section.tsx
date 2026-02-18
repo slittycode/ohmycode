@@ -8,12 +8,18 @@ import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import styles from "./reload-section.module.css"
 import { queryBillingInfo } from "../../common"
 import { useI18n } from "~/context/i18n"
-import { formError, formErrorReloadAmountMin, formErrorReloadTriggerMin, localizeError } from "~/lib/form-error"
+import {
+  formErrorReloadAmountMin,
+  formErrorReloadTriggerMin,
+  localizeError,
+  requireWorkspaceID,
+} from "~/lib/form-error"
 
 const reload = action(async (form: FormData) => {
   "use server"
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   return json(await withActor(() => Billing.reload(), workspaceID), {
     revalidate: queryBillingInfo.key,
   })
@@ -21,8 +27,9 @@ const reload = action(async (form: FormData) => {
 
 const setReload = action(async (form: FormData) => {
   "use server"
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   const reloadValue = form.get("reload")?.toString() === "true"
   const amountStr = form.get("reloadAmount")?.toString()
   const triggerStr = form.get("reloadTrigger")?.toString()

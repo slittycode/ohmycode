@@ -58,6 +58,12 @@ export function formErrorReloadTriggerMin(amount: number) {
   return `error.reloadTriggerMin:${amount}`
 }
 
+export function requireWorkspaceID(form: FormData) {
+  const workspaceID = form.get("workspaceID")?.toString()
+  if (!workspaceID) return { error: formError.workspaceRequired } as const
+  return { workspaceID } as const
+}
+
 export function localizeError(t: (key: Key, params?: Record<string, string | number>) => string, error?: string) {
   if (!error) return ""
 

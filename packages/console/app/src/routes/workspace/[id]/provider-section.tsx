@@ -5,7 +5,7 @@ import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
 import styles from "./provider-section.module.css"
 import { useI18n } from "~/context/i18n"
-import { formError, localizeError } from "~/lib/form-error"
+import { formError, localizeError, requireWorkspaceID } from "~/lib/form-error"
 
 const PROVIDERS = [
   { name: "OpenAI", key: "openai", prefix: "sk-" },
@@ -23,8 +23,9 @@ const removeProvider = action(async (form: FormData) => {
   "use server"
   const provider = form.get("provider")?.toString()
   if (!provider) return { error: formError.providerRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   return json(await withActor(() => Provider.remove({ provider }), workspaceID), {
     revalidate: listProviders.key,
   })
@@ -36,8 +37,9 @@ const saveProvider = action(async (form: FormData) => {
   const credentials = form.get("credentials")?.toString()
   if (!provider) return { error: formError.providerRequired }
   if (!credentials) return { error: formError.apiKeyRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   return json(
     await withActor(
       () =>

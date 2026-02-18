@@ -8,14 +8,15 @@ import { formatDateUTC, formatDateForTable } from "../../common"
 import styles from "./key-section.module.css"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { useI18n } from "~/context/i18n"
-import { formError, localizeError } from "~/lib/form-error"
+import { formError, localizeError, requireWorkspaceID } from "~/lib/form-error"
 
 const removeKey = action(async (form: FormData) => {
   "use server"
   const id = form.get("id")?.toString()
   if (!id) return { error: formError.idRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   return json(await withActor(() => Key.remove({ id }), workspaceID), { revalidate: listKeys.key })
 }, "key.remove")
 
@@ -23,8 +24,9 @@ const createKey = action(async (form: FormData) => {
   "use server"
   const name = form.get("name")?.toString().trim()
   if (!name) return { error: formError.nameRequired }
-  const workspaceID = form.get("workspaceID")?.toString()
-  if (!workspaceID) return { error: formError.workspaceRequired }
+  const workspace = requireWorkspaceID(form)
+  if ("error" in workspace) return workspace
+  const workspaceID = workspace.workspaceID
   return json(
     await withActor(
       () =>
