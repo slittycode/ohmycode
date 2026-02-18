@@ -21,11 +21,8 @@ export namespace Locale {
     const isToday =
       date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth() && date.getDate() === now.getDate()
 
-    if (isToday) {
-      return time(input)
-    } else {
-      return datetime(input)
-    }
+    if (isToday) return time(input)
+    return datetime(input)
   }
 
   export function number(num: number): string {
