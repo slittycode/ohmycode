@@ -1,0 +1,10 @@
+# Protect OhMyCode identity files during upstream merges
+README.md merge=ours
+README.*.md merge=ours
+CONTRIBUTING.md merge=ours
+SECURITY.md merge=ours
+AGENTS.md merge=ours
+CHANGELOG.md merge=ours
+package.json merge=ours
+VISION.md merge=ours
+UPSTREAM.md merge=ours

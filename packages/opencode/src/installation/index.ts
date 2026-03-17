@@ -124,20 +124,22 @@ export namespace Installation {
   )
 
   async function getBrewFormula() {
+    const ohmycodeTap = await $`brew list --formula slittycode/tap/ohmycode`.throws(false).quiet().text()
+    if (ohmycodeTap.includes("ohmycode")) return "slittycode/tap/ohmycode"
     const ohmycode = await $`brew list --formula ohmycode`.throws(false).quiet().text()
     if (ohmycode.includes("ohmycode")) return "ohmycode"
     const tapFormula = await $`brew list --formula anomalyco/tap/opencode`.throws(false).quiet().text()
     if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
     const coreFormula = await $`brew list --formula opencode`.throws(false).quiet().text()
     if (coreFormula.includes("opencode")) return "opencode"
-    return "ohmycode"
+    return "slittycode/tap/ohmycode"
   }
 
   export async function upgrade(method: Method, target: string) {
     let cmd
     switch (method) {
       case "curl":
-        cmd = $`curl -fsSL https://opencode.ai/install | bash`.env({
+        cmd = $`curl -fsSL https://ohmycode.ai/install | bash || curl -fsSL https://opencode.ai/install | bash`.env({
           ...process.env,
           VERSION: target,
         })
@@ -273,9 +275,13 @@ export namespace Installation {
         .then((data: any) => data.version)
     }
 
-    return fetch("https://api.github.com/repos/anomalyco/opencode/releases/latest")
-      .then((res) => {
-        if (!res.ok) throw new Error(res.statusText)
+    return fetch("https://api.github.com/repos/slittycode/ohmycode/releases/latest")
+      .then(async (res) => {
+        if (!res.ok) {
+          const fallback = await fetch("https://api.github.com/repos/anomalyco/opencode/releases/latest")
+          if (!fallback.ok) throw new Error(fallback.statusText)
+          return fallback.json()
+        }
         return res.json()
       })
       .then((data: any) => data.tag_name.replace(/^v/, ""))
